@@ -82,8 +82,7 @@ fn print_tasks() -> Result<(), Error> {
                     String::from_iter(process_name.iter().map(|&x| x as u8 as char)) // TODO: UGLY hack
                 );
             }
-        }
-        unsafe {
+
             CloseHandle(process_handle);
         }
     }
