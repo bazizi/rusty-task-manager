@@ -1,5 +1,5 @@
 # rusty-task-manager
-A simple task manager for Windows written in Rust
+A simple task manager for Windows written in Rust (`egui` + `winapi`)
 
 ![screenshot](screenshot.png)
 
