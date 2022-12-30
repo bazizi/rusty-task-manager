@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"] // hide console window on Windows in release
+#![windows_subsystem = "windows"]
 use eframe::egui;
 
 #[cfg(windows)]
@@ -13,7 +13,7 @@ fn main() {
         ..Default::default()
     };
     eframe::run_native(
-        "Task Manager",
+        "Rusty Task Manager",
         options,
         Box::new(|_cc| Box::new(MyApp::default())),
     )
@@ -141,10 +141,6 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
 
     process_ids.resize(cb_needed as usize, 0);
 
-    // use std::ffi::OsStr;
-    // let mut process_name = OsStr::new("");
-    // process_name.
-
     let num_processes = cb_needed as usize / std::mem::size_of::<DWORD>();
     let mut process_info = Vec::new();
     for i in 0..num_processes {
@@ -157,7 +153,6 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
         };
 
         if process_handle.is_null() {
-            // TODO: println!("Failed to open process for process ID {}", process_ids[i]);
             continue;
         }
 
