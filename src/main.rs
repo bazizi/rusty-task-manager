@@ -12,7 +12,7 @@ fn main() {
         ..Default::default()
     };
     eframe::run_native(
-        "My egui App",
+        "Task Manager",
         options,
         Box::new(|_cc| Box::new(MyApp::default())),
     )
@@ -27,15 +27,20 @@ struct Process {
 
 struct MyApp {
     processes: Vec<Process>,
+    filter: String,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         if let Ok(processes) = get_process_list() {
-            Self { processes }
+            Self {
+                processes,
+                filter: String::new(),
+            }
         } else {
             Self {
                 processes: Vec::new(),
+                filter: String::new(),
             }
         }
     }
@@ -44,19 +49,56 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("My egui Application");
             ui.heading(format!("# processes: {}", self.processes.len()));
+            ui.label("Filter by name:");
+            ui.text_edit_singleline(&mut self.filter);
 
             if self.processes.is_empty() {
                 if let Ok(processes) = get_process_list() {
                     self.processes = processes;
                 }
             }
-            self.processes.iter().for_each(|process| {
+
+            egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(format!("{}", process.id));
-                    ui.label(&process.name);
-                    ui.label(&process.path);
+                    ui.vertical(|ui| {
+                        ui.heading("PID");
+                        self.processes.iter().for_each(|process| {
+                            if process
+                                .name
+                                .to_lowercase()
+                                .contains(self.filter.to_lowercase().as_str())
+                            {
+                                ui.label(format!("{}", process.id));
+                            }
+                        });
+                    });
+
+                    ui.vertical(|ui| {
+                        ui.heading("Name");
+                        self.processes.iter().for_each(|process| {
+                            if process
+                                .name
+                                .to_lowercase()
+                                .contains(self.filter.to_lowercase().as_str())
+                            {
+                                ui.label(&process.name);
+                            }
+                        });
+                    });
+
+                    ui.vertical(|ui| {
+                        ui.heading("Path");
+                        self.processes.iter().for_each(|process| {
+                            if process
+                                .name
+                                .to_lowercase()
+                                .contains(self.filter.to_lowercase().as_str())
+                            {
+                                ui.label(&process.path);
+                            }
+                        });
+                    });
                 });
             });
         });
