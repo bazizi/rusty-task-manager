@@ -71,6 +71,7 @@ impl eframe::App for MyApp {
                     ui.heading("Actions");
                     ui.heading("PID");
                     ui.heading("Name");
+                    ui.heading("Path");
 
                     ui.end_row();
 
