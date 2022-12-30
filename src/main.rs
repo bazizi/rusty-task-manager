@@ -62,6 +62,21 @@ impl eframe::App for MyApp {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
+                        ui.heading("Actions");
+                        self.processes.iter().for_each(|process| {
+                            if process
+                                .name
+                                .to_lowercase()
+                                .contains(self.filter.to_lowercase().as_str())
+                            {
+                                if ui.button("Terminate").clicked() {
+                                    terminate_process(process.id);
+                                }
+                            }
+                        });
+                    });
+
+                    ui.vertical(|ui| {
                         ui.heading("PID");
                         self.processes.iter().for_each(|process| {
                             if process
@@ -102,6 +117,20 @@ impl eframe::App for MyApp {
                 });
             });
         });
+    }
+}
+
+#[cfg(windows)]
+fn terminate_process(pid: u32) {
+    use winapi::um::handleapi::CloseHandle;
+    use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
+    use winapi::um::winnt::PROCESS_TERMINATE;
+
+    let process_handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
+
+    unsafe {
+        TerminateProcess(process_handle, 1);
+        CloseHandle(process_handle);
     }
 }
 
@@ -211,9 +240,9 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
     println!("{:?}", process_info);
     Ok(process_info)
 }
-#[cfg(not(windows))]
 
+#[cfg(not(windows))]
 fn get_process_list() -> Result<(), Error> {
     println!("platform not supported");
-    Ok(())
+    Err(Error)
 }
