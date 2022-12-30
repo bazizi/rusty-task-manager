@@ -5,6 +5,7 @@ use eframe::egui;
 extern crate winapi;
 
 use std::io::Error;
+use std::time::Instant;
 
 fn main() {
     let options = eframe::NativeOptions {
@@ -28,6 +29,7 @@ struct Process {
 struct MyApp {
     processes: Vec<Process>,
     filter: String,
+    last_update: Instant,
 }
 
 impl Default for MyApp {
@@ -36,11 +38,13 @@ impl Default for MyApp {
             Self {
                 processes,
                 filter: String::new(),
+                last_update: Instant::now(),
             }
         } else {
             Self {
                 processes: Vec::new(),
                 filter: String::new(),
+                last_update: Instant::now(),
             }
         }
     }
@@ -49,15 +53,18 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            if self.processes.is_empty()
+                || (Instant::now().duration_since(self.last_update).as_secs() > 1)
+            {
+                if let Ok(processes) = get_process_list() {
+                    self.processes = processes;
+                    self.last_update = Instant::now();
+                }
+            }
+
             ui.heading(format!("# processes: {}", self.processes.len()));
             ui.label("Filter by name:");
             ui.text_edit_singleline(&mut self.filter);
-
-            if self.processes.is_empty() {
-                if let Ok(processes) = get_process_list() {
-                    self.processes = processes;
-                }
-            }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -216,7 +223,7 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
                     process_name.len() as DWORD,
                 );
 
-                process_info.push(Process {
+                let process = Process {
                     name: String::from_iter(
                         process_name
                             .iter()
@@ -230,7 +237,9 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
                             .map(|&x| x as u8 as char),
                     ),
                     id: process_ids[i],
-                });
+                };
+
+                process_info.push(process);
             }
 
             CloseHandle(process_handle);
