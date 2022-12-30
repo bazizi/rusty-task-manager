@@ -67,59 +67,28 @@ impl eframe::App for MyApp {
             ui.text_edit_singleline(&mut self.filter);
 
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.heading("Actions");
-                        self.processes.iter().for_each(|process| {
-                            if process
-                                .name
-                                .to_lowercase()
-                                .contains(self.filter.to_lowercase().as_str())
-                            {
-                                if ui.button("Terminate").clicked() {
-                                    terminate_process(process.id);
-                                }
-                            }
-                        });
-                    });
+                egui::Grid::new("some_unique_id").show(ui, |ui| {
+                    ui.heading("Actions");
+                    ui.heading("PID");
+                    ui.heading("Name");
 
-                    ui.vertical(|ui| {
-                        ui.heading("PID");
-                        self.processes.iter().for_each(|process| {
-                            if process
-                                .name
-                                .to_lowercase()
-                                .contains(self.filter.to_lowercase().as_str())
-                            {
-                                ui.label(format!("{}", process.id));
-                            }
-                        });
-                    });
+                    ui.end_row();
 
-                    ui.vertical(|ui| {
-                        ui.heading("Name");
-                        self.processes.iter().for_each(|process| {
-                            if process
-                                .name
-                                .to_lowercase()
-                                .contains(self.filter.to_lowercase().as_str())
-                            {
-                                ui.label(&process.name);
+                    self.processes.iter().for_each(|process| {
+                        if process
+                            .name
+                            .to_lowercase()
+                            .contains(self.filter.to_lowercase().as_str())
+                        {
+                            if ui.button("Terminate").clicked() {
+                                terminate_process(process.id);
                             }
-                        });
-                    });
 
-                    ui.vertical(|ui| {
-                        ui.heading("Path");
-                        self.processes.iter().for_each(|process| {
-                            if process
-                                .name
-                                .to_lowercase()
-                                .contains(self.filter.to_lowercase().as_str())
-                            {
-                                ui.label(&process.path);
-                            }
-                        });
+                            ui.label(format!("{}", process.id));
+                            ui.label(&process.name);
+                            ui.label(&process.path);
+                            ui.end_row();
+                        }
                     });
                 });
             });
