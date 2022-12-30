@@ -1,2 +1,4 @@
 # rusty-task-manager
-A task manager for Windows written in Rust
+A simple task manager for Windows written in Rust
+
+![screenshot](screenshot.png)
