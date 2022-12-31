@@ -1,9 +1,6 @@
 #![windows_subsystem = "windows"]
 use eframe::egui;
 
-#[cfg(windows)]
-extern crate winapi;
-
 use std::io::Error;
 use std::time::Instant;
 
@@ -71,6 +68,7 @@ impl eframe::App for MyApp {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 egui::Grid::new("some_unique_id").show(ui, |ui| {
                     ui.heading("Actions");
+                    ui.heading("");
                     ui.heading("PID");
                     ui.heading("Name");
                     ui.heading("Path");
@@ -90,6 +88,10 @@ impl eframe::App for MyApp {
                                     terminate_process(process.id);
                                 }
 
+                                if ui.button("Open folder").clicked() {
+                                    open_folder(&process.path);
+                                }
+
                                 ui.label(format!("{}", process.id));
                                 ui.label(&process.name);
                                 ui.label(&process.path);
@@ -105,39 +107,73 @@ impl eframe::App for MyApp {
 }
 
 #[cfg(windows)]
-fn terminate_process(pid: u32) {
-    use winapi::um::handleapi::CloseHandle;
-    use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
-    use winapi::um::winnt::PROCESS_TERMINATE;
+fn open_folder(path: &String) {
+    // TODO
 
-    let process_handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
+    use std::{ffi::OsStr, os::windows::prelude::OsStrExt, ptr::null_mut};
+
+    use windows_sys::Win32::UI::Shell::SHParseDisplayName;
+    let path = std::path::Path::new(path);
+    if let Some(path) = path.parent() {
+        let path = std::ffi::OsStr::new(path).encode_wide();
+
+        unsafe {
+            use windows_sys::Win32::UI::Shell::Common::{ITEMIDLIST, SHITEMID};
+
+            let mut id_list = Vec::<ITEMIDLIST>::new();
+
+            if SHParseDisplayName(
+                path.collect::<Vec<u16>>().as_ptr(),
+                null_mut(),
+                &mut id_list.as_mut_ptr(),
+                0,
+                null_mut(),
+            ) == 0
+            {
+                use windows_sys::Win32::UI::Shell::SHOpenFolderAndSelectItems;
+
+                let mut idl = Vec::<ITEMIDLIST>::new();
+                idl.push(ITEMIDLIST {
+                    mkid: SHITEMID { cb: 0, abID: [0] },
+                });
+
+                SHOpenFolderAndSelectItems(id_list.as_ptr(), 1, &idl.as_ptr(), 0);
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn terminate_process(pid: u32) {
+    let process_handle = unsafe {
+        use windows_sys::Win32::System::Threading::OpenProcess;
+        use windows_sys::Win32::System::Threading::PROCESS_TERMINATE;
+
+        OpenProcess(PROCESS_TERMINATE, 0, pid)
+    };
 
     unsafe {
+        use windows_sys::Win32::System::Threading::TerminateProcess;
         TerminateProcess(process_handle, 1);
+
+        use windows_sys::Win32::Foundation::CloseHandle;
         CloseHandle(process_handle);
     }
 }
 
 #[cfg(windows)]
 fn get_process_list() -> Result<Vec<Process>, Error> {
-    use std::ptr::null_mut;
-    use winapi::shared::minwindef::{DWORD, HMODULE, MAX_PATH};
-    use winapi::um::handleapi::CloseHandle;
-    use winapi::um::processthreadsapi::OpenProcess;
-    use winapi::um::psapi::{
-        EnumProcessModules, EnumProcesses, GetModuleBaseNameA, GetModuleFileNameExA,
-    };
-    use winapi::um::winnt::{PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
+    let mut process_info = Vec::new();
 
     let mut process_ids = Vec::with_capacity(1024);
     process_ids.resize(1024, 0);
+    let mut cb_needed: u32 = 0;
 
-    let mut cb_needed: DWORD = 0;
     if unsafe {
-        // get the size needed for the process_ids buffer
-        EnumProcesses(
+        use windows_sys::Win32::System::ProcessStatus::K32EnumProcesses;
+        K32EnumProcesses(
             process_ids.as_mut_ptr(),
-            (process_ids.len() * std::mem::size_of::<DWORD>()) as DWORD,
+            (process_ids.len() * std::mem::size_of::<u32>()) as u32,
             &mut cb_needed,
         )
     } == 0
@@ -147,9 +183,12 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
         println!("\nInitial EnumProcesses success");
     }
 
-    let num_processes = cb_needed as usize / std::mem::size_of::<DWORD>();
+    let num_processes = cb_needed as usize / std::mem::size_of::<u32>();
     process_ids.resize(num_processes, 0);
-    let mut process_info = Vec::new();
+
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    use windows_sys::Win32::System::Threading::{PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
+
     for i in 0..num_processes {
         let process_handle = unsafe {
             OpenProcess(
@@ -159,39 +198,47 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
             )
         };
 
-        if process_handle.is_null() {
+        if process_handle == 0 {
             continue;
         }
 
-        let mut process_name = Vec::<i8>::new();
-        process_name.resize(MAX_PATH, 0);
+        use windows_sys::Win32::Foundation::MAX_PATH;
 
-        let mut process_path = Vec::<i8>::new();
-        process_path.resize(MAX_PATH, 0);
+        let mut process_name = Vec::<u8>::new();
+        process_name.resize(MAX_PATH as usize, 0);
 
-        let mut module_handle: HMODULE = null_mut();
+        let mut process_path = Vec::<u8>::new();
+        process_path.resize(MAX_PATH as usize, 0);
+
+        use windows_sys::Win32::Foundation::HINSTANCE;
+        let mut module_handle: HINSTANCE = 0;
         cb_needed = 0;
 
         unsafe {
-            if EnumProcessModules(
+            use windows_sys::Win32::System::ProcessStatus::K32EnumProcessModules;
+
+            if K32EnumProcessModules(
                 process_handle,
                 &mut module_handle,
-                std::mem::size_of::<HMODULE>() as DWORD,
+                std::mem::size_of::<u32>() as u32,
                 &mut cb_needed,
             ) != 0
             {
-                GetModuleFileNameExA(
+                use windows_sys::Win32::System::ProcessStatus::K32GetModuleFileNameExA;
+
+                K32GetModuleFileNameExA(
                     process_handle,
                     module_handle,
                     process_path.as_mut_ptr(),
-                    process_path.len() as DWORD,
+                    process_path.len() as u32,
                 );
 
-                GetModuleBaseNameA(
+                use windows_sys::Win32::System::ProcessStatus::K32GetModuleBaseNameA;
+                K32GetModuleBaseNameA(
                     process_handle,
                     module_handle,
                     process_name.as_mut_ptr(),
-                    process_name.len() as DWORD,
+                    process_name.len() as u32,
                 );
 
                 let process = Process {
@@ -199,13 +246,13 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
                         process_name
                             .iter()
                             .take_while(|&&x| x != 0)
-                            .map(|&x| x as u8 as char),
+                            .map(|&x| x as char),
                     ),
                     path: String::from_iter(
                         process_path
                             .iter()
                             .take_while(|&&x| x != 0)
-                            .map(|&x| x as u8 as char),
+                            .map(|&x| x as char),
                     ),
                     id: process_ids[i],
                 };
@@ -213,11 +260,11 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
                 process_info.push(process);
             }
 
+            use windows_sys::Win32::Foundation::CloseHandle;
             CloseHandle(process_handle);
         }
     }
 
-    println!("{:?}", process_info);
     Ok(process_info)
 }
 

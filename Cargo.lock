@@ -1271,7 +1271,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui",
- "winapi",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]

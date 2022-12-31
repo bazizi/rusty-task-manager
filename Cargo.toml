@@ -6,7 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["psapi", "processthreadsapi", "winnt", "handleapi"] }
+windows-sys = {version = "0.42.0", features = [
+    "Win32_System_ProcessStatus", "Win32_Foundation",    # K32EnumProcessModules, K32EnumProcesses
+    "Win32_System_Threading", # OpenProcess
+    "Win32_System_LibraryLoader", # GetModuleFileNameA
+    "Win32_UI_Shell", "Win32_System_Com", "Win32_UI_Shell_Common" # SHParseDisplayName
+]}
+
 egui = "0.20.1"
 eframe = { version = "0.20.1", default-features = false, features = [
     "default_fonts", # Embed the default egui fonts.
