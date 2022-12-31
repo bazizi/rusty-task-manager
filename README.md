@@ -7,6 +7,7 @@ A simple task manager for Windows written in Rust (`egui` + `windows-sys`)
 # TODO
 - Ability to sort by column
 - Ability to control refresh rate
+- Ability to add specific tasks to watchlist
 - Viewing process command line parameters
 - Viewing process memory usage
 - Viewing process cpu usage
