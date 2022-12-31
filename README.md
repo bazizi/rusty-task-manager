@@ -6,7 +6,6 @@ A simple task manager for Windows written in Rust (`egui` + `winapi`)
 
 # TODO
 - Ability to sort by column
-- Ability to filter by multiple keywords
 - Ability to control refresh rate
 - Viewing process command line parameters
 - Viewing process memory usage

@@ -63,8 +63,10 @@ impl eframe::App for MyApp {
             }
 
             ui.heading(format!("# processes: {}", self.processes.len()));
-            ui.label("Filter by name:");
-            ui.text_edit_singleline(&mut self.filter);
+            ui.horizontal(|ui| {
+                ui.label("Filter by name:");
+                ui.text_edit_singleline(&mut self.filter);
+            });
 
             egui::ScrollArea::vertical().show(ui, |ui| {
                 egui::Grid::new("some_unique_id").show(ui, |ui| {
@@ -76,19 +78,24 @@ impl eframe::App for MyApp {
                     ui.end_row();
 
                     self.processes.iter().for_each(|process| {
-                        if process
-                            .name
-                            .to_lowercase()
-                            .contains(self.filter.to_lowercase().as_str())
-                        {
-                            if ui.button("Terminate").clicked() {
-                                terminate_process(process.id);
-                            }
+                        let filters = self.filter.split(",").map(|x| x.trim());
 
-                            ui.label(format!("{}", process.id));
-                            ui.label(&process.name);
-                            ui.label(&process.path);
-                            ui.end_row();
+                        for filter in filters {
+                            if process
+                                .name
+                                .to_lowercase()
+                                .contains(filter.to_lowercase().as_str())
+                            {
+                                if ui.button("Terminate").clicked() {
+                                    terminate_process(process.id);
+                                }
+
+                                ui.label(format!("{}", process.id));
+                                ui.label(&process.name);
+                                ui.label(&process.path);
+                                ui.end_row();
+                                break;
+                            }
                         }
                     });
                 });
