@@ -1,19 +1,22 @@
 #![windows_subsystem = "windows"]
 use eframe::egui;
+use eframe::epaint::FontId;
 
-use std::io::Error;
+use std::io::{Error, Read, Write};
 use std::time::Instant;
+
+const FILTER_CONFIG_FILE_NAME: &str = "filters.cfg";
 
 fn main() {
     let options = eframe::NativeOptions {
         initial_window_size: Some(egui::vec2(800.0, 600.0)),
         ..Default::default()
     };
-    eframe::run_native(
-        "Rusty Task Manager",
-        options,
-        Box::new(|_cc| Box::new(MyApp::default())),
-    )
+
+    let mut app = MyApp::default();
+    app.load_filter_from_file();
+
+    eframe::run_native("Rusty Task Manager", options, Box::new(|_cc| Box::new(app)))
 }
 
 #[derive(Debug)]
@@ -27,6 +30,24 @@ struct MyApp {
     processes: Vec<Process>,
     filter: String,
     last_update: Instant,
+    font_size: f32,
+}
+
+impl MyApp {
+    fn save_filter_to_file(&self) {
+        if let Ok(mut file) = std::fs::File::create(FILTER_CONFIG_FILE_NAME) {
+            file.write_all(self.filter.as_bytes()).unwrap();
+        }
+    }
+
+    fn load_filter_from_file(&mut self) {
+        if let Ok(mut file) = std::fs::File::open(FILTER_CONFIG_FILE_NAME) {
+            let mut filter_copy = self.filter.clone();
+            if let Ok(_num_bytes) = file.read_to_string(&mut filter_copy) {
+                self.filter = filter_copy;
+            }
+        }
+    }
 }
 
 impl Default for MyApp {
@@ -36,12 +57,14 @@ impl Default for MyApp {
                 processes,
                 filter: String::new(),
                 last_update: Instant::now(),
+                font_size: 18.,
             }
         } else {
             Self {
                 processes: Vec::new(),
                 filter: String::new(),
                 last_update: Instant::now(),
+                font_size: 18.,
             }
         }
     }
@@ -62,7 +85,11 @@ impl eframe::App for MyApp {
             ui.heading(format!("# processes: {}", self.processes.len()));
             ui.horizontal(|ui| {
                 ui.label("Filter by name:");
+                let filter_befor_update = self.filter.clone();
                 ui.text_edit_singleline(&mut self.filter);
+                if filter_befor_update != self.filter {
+                    self.save_filter_to_file();
+                }
             });
 
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -93,8 +120,18 @@ impl eframe::App for MyApp {
                                 }
 
                                 ui.label(format!("{}", process.id));
-                                ui.label(&process.name);
-                                ui.label(&process.path);
+                                ui.label(
+                                    egui::RichText::new(&process.name)
+                                        .heading()
+                                        .font(FontId::monospace(self.font_size)),
+                                );
+
+                                ui.label(
+                                    egui::RichText::new(&process.path)
+                                        .heading()
+                                        .font(FontId::monospace(self.font_size)),
+                                );
+
                                 ui.end_row();
                                 break;
                             }
@@ -110,37 +147,54 @@ impl eframe::App for MyApp {
 fn open_folder(path: &String) {
     // TODO
 
-    use std::{ffi::OsStr, os::windows::prelude::OsStrExt, ptr::null_mut};
+    println!("open_folder called for [{}]", path);
 
-    use windows_sys::Win32::UI::Shell::SHParseDisplayName;
-    let path = std::path::Path::new(path);
-    if let Some(path) = path.parent() {
-        let path = std::ffi::OsStr::new(path).encode_wide();
+    let path = path.clone() + "\0\0";
 
-        unsafe {
-            use windows_sys::Win32::UI::Shell::Common::{ITEMIDLIST, SHITEMID};
+    std::thread::spawn(move || {
+        use std::{os::windows::prelude::OsStrExt, ptr::null_mut};
 
-            let mut id_list = Vec::<ITEMIDLIST>::new();
+        use windows_sys::Win32::{
+            System::SystemServices::SFGAO_FILESYSTEM, UI::Shell::SHParseDisplayName,
+        };
+        let path = std::path::Path::new(&path);
+        if let Some(path) = path.parent() {
+            let path = std::ffi::OsStr::new(path).encode_wide();
 
-            if SHParseDisplayName(
-                path.collect::<Vec<u16>>().as_ptr(),
-                null_mut(),
-                &mut id_list.as_mut_ptr(),
-                0,
-                null_mut(),
-            ) == 0
-            {
-                use windows_sys::Win32::UI::Shell::SHOpenFolderAndSelectItems;
+            unsafe {
+                use windows_sys::Win32::UI::Shell::Common::ITEMIDLIST;
 
-                let mut idl = Vec::<ITEMIDLIST>::new();
-                idl.push(ITEMIDLIST {
-                    mkid: SHITEMID { cb: 0, abID: [0] },
-                });
+                let mut ptr_itemidlist: *mut ITEMIDLIST = std::ptr::null_mut();
 
-                SHOpenFolderAndSelectItems(id_list.as_ptr(), 1, &idl.as_ptr(), 0);
+                let sfgao_in: u32 = SFGAO_FILESYSTEM as u32;
+                let mut sfgao_out: u32 = 0;
+
+                println!("SHParseDisplayName queried for attributes: {}", sfgao_in);
+
+                if SHParseDisplayName(
+                    path.collect::<Vec<u16>>().as_ptr(),
+                    null_mut(),
+                    &mut ptr_itemidlist,
+                    sfgao_in,
+                    &mut sfgao_out,
+                ) == 0
+                {
+                    use windows_sys::Win32::UI::Shell::SHOpenFolderAndSelectItems;
+
+                    let idls = [*ptr_itemidlist];
+
+                    SHOpenFolderAndSelectItems(ptr_itemidlist, 0, &idls.as_ptr(), sfgao_out);
+                } else {
+                    println!("SHParseDisplayName FAILED");
+                }
+
+                println!(
+                    "SHParseDisplayName obtained results for attributes: {}",
+                    sfgao_out
+                );
             }
         }
-    }
+    });
 }
 
 #[cfg(windows)]
@@ -179,8 +233,6 @@ fn get_process_list() -> Result<Vec<Process>, Error> {
     } == 0
     {
         return Err(Error::last_os_error());
-    } else {
-        println!("\nInitial EnumProcesses success");
     }
 
     let num_processes = cb_needed as usize / std::mem::size_of::<u32>();
